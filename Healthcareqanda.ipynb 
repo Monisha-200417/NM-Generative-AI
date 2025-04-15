@@ -1,0 +1,210 @@
+{
+  "nbformat": 4,
+  "nbformat_minor": 0,
+  "metadata": {
+    "colab": {
+      "provenance": [],
+      "authorship_tag": "ABX9TyMM6f6tVOQMgXSDv/iC6uix",
+      "include_colab_link": true
+    },
+    "kernelspec": {
+      "name": "python3",
+      "display_name": "Python 3"
+    },
+    "language_info": {
+      "name": "python"
+    }
+  },
+  "cells": [
+    {
+      "cell_type": "markdown",
+      "metadata": {
+        "id": "view-in-github",
+        "colab_type": "text"
+      },
+      "source": [
+        "<a href=\"https://colab.research.google.com/github/Monisha-200417/NM-Generative-AI/blob/main/Healthcareqanda.ipynb%20\" target=\"_parent\"><img src=\"https://colab.research.google.com/assets/colab-badge.svg\" alt=\"Open In Colab\"/></a>"
+      ]
+    },
+    {
+      "cell_type": "code",
+      "source": [
+        "# ✅ Step 1: Install dependencies\n",
+        "!pip install -q langchain faiss-cpu langchain-community langchain-google-genai biopython google-generativeai\n",
+        "\n",
+        "# ✅ Step 2: Import necessary libraries\n",
+        "import os\n",
+        "from langchain.vectorstores import FAISS\n",
+        "from langchain.text_splitter import RecursiveCharacterTextSplitter\n",
+        "from langchain.chains import RetrievalQA\n",
+        "from langchain_google_genai import ChatGoogleGenerativeAI, GoogleGenerativeAIEmbeddings\n",
+        "from langchain_community.document_loaders import TextLoader\n",
+        "from langchain_community.docstore.document import Document\n",
+        "from Bio import Entrez\n",
+        "\n",
+        "# ✅ Step 3: API keys\n",
+        "os.environ[\"GOOGLE_API_KEY\"] = \"AIzaSyCWLjSVf-HHX0Druu_k3VRvNKdinabHxmw\"  # Replace with your Gemini API key\n",
+        "Entrez.email = \"monishasundar17@gmail.com\"  # Replace with your email for PubMed\n",
+        "\n",
+        "# ✅ Step 4: Fetch articles from PubMed\n",
+        "def fetch_pubmed_articles(query, max_results=5):\n",
+        "    handle = Entrez.esearch(db=\"pubmed\", term=query, retmax=max_results)\n",
+        "    record = Entrez.read(handle)\n",
+        "    ids = record[\"IdList\"]\n",
+        "    abstracts = []\n",
+        "    for pmid in ids:\n",
+        "        fetch = Entrez.efetch(db=\"pubmed\", id=pmid, rettype=\"abstract\", retmode=\"text\")\n",
+        "        abstract_text = fetch.read().strip()\n",
+        "        if abstract_text:\n",
+        "            abstracts.append(Document(page_content=abstract_text, metadata={\"pubmed_id\": pmid}))\n",
+        "    return abstracts\n",
+        "\n",
+        "# ✅ Step 5: Build vector store\n",
+        "def build_vectorstore_from_articles(articles):\n",
+        "    text_splitter = RecursiveCharacterTextSplitter(chunk_size=1000, chunk_overlap=200)\n",
+        "    split_docs = text_splitter.split_documents(articles)\n",
+        "    embeddings = GoogleGenerativeAIEmbeddings(model=\"models/embedding-001\")\n",
+        "    vectorstore = FAISS.from_documents(split_docs, embeddings)\n",
+        "    return vectorstore\n",
+        "\n",
+        "# ✅ Step 6: Create Gemini-based QA system\n",
+        "def create_qa_chain(vectorstore):\n",
+        "    llm = ChatGoogleGenerativeAI(model=\"gemini-1.5-pro\", temperature=0.2)\n",
+        "    retriever = vectorstore.as_retriever()\n",
+        "    qa_chain = RetrievalQA.from_chain_type(llm=llm, retriever=retriever, return_source_documents=True)\n",
+        "    return qa_chain\n",
+        "\n",
+        "# ✅ Step 7: Ask your question\n",
+        "def ask_health_question(query, qa_chain):\n",
+        "    result = qa_chain(query)\n",
+        "    print(\"\\n🩺 Answer:\\n\")\n",
+        "    print(result[\"result\"])\n",
+        "    print(\"\\n📚 Sources:\")\n",
+        "    for i, doc in enumerate(result[\"source_documents\"]):\n",
+        "        print(f\"\\nSource {i+1} (PubMed ID: {doc.metadata.get('pubmed_id', 'N/A')}):\\n{doc.page_content[:500]}...\")\n",
+        "\n",
+        "# ✅ Step 8: Run everything interactively\n",
+        "if __name__ == \"__main__\":\n",
+        "    user_query = input(\"💬 Enter your medical/healthcare question: \")\n",
+        "\n",
+        "    print(\"\\n🔍 Searching PubMed for related research...\")\n",
+        "    articles = fetch_pubmed_articles(user_query, max_results=5)\n",
+        "\n",
+        "    if not articles:\n",
+        "        print(\"❌ No articles found on this topic. Try a different question.\")\n",
+        "    else:\n",
+        "        print(\"📚 Building knowledge base from PubMed articles...\")\n",
+        "        vectorstore = build_vectorstore_from_articles(articles)\n",
+        "\n",
+        "        print(\"🤖 Connecting to Gemini for answer generation...\")\n",
+        "        qa_chain = create_qa_chain(vectorstore)\n",
+        "\n",
+        "        ask_health_question(user_query, qa_chain)"
+      ],
+      "metadata": {
+        "colab": {
+          "base_uri": "https://localhost:8080/"
+        },
+        "id": "WxkVMXMZ36Ne",
+        "outputId": "5be000ae-e420-4076-f99b-54d5c1e81b8e"
+      },
+      "execution_count": null,
+      "outputs": [
+        {
+          "output_type": "stream",
+          "name": "stdout",
+          "text": [
+            "\u001b[2K   \u001b[90m━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━\u001b[0m \u001b[32m2.5/2.5 MB\u001b[0m \u001b[31m24.6 MB/s\u001b[0m eta \u001b[36m0:00:00\u001b[0m\n",
+            "\u001b[2K   \u001b[90m━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━\u001b[0m \u001b[32m50.9/50.9 kB\u001b[0m \u001b[31m3.1 MB/s\u001b[0m eta \u001b[36m0:00:00\u001b[0m\n",
+            "\u001b[?25h💬 Enter your medical/healthcare question: What is multiple sclerosis\n",
+            "\n",
+            "🔍 Searching PubMed for related research...\n",
+            "📚 Building knowledge base from PubMed articles...\n",
+            "🤖 Connecting to Gemini for answer generation...\n"
+          ]
+        },
+        {
+          "output_type": "stream",
+          "name": "stderr",
+          "text": [
+            "<ipython-input-3-e6b0f0f14719>:48: LangChainDeprecationWarning: The method `Chain.__call__` was deprecated in langchain 0.1.0 and will be removed in 1.0. Use :meth:`~invoke` instead.\n",
+            "  result = qa_chain(query)\n"
+          ]
+        },
+        {
+          "output_type": "stream",
+          "name": "stdout",
+          "text": [
+            "\n",
+            "🩺 Answer:\n",
+            "\n",
+            "This set of abstracts discusses studies related to multiple sclerosis (MS) but doesn't define the disease itself.  Therefore, I cannot provide a definition of multiple sclerosis.\n",
+            "\n",
+            "📚 Sources:\n",
+            "\n",
+            "Source 1 (PubMed ID: 40229636):\n",
+            "Remyelination of cortical lesions in people with multiple sclerosis (pwMS) has \n",
+            "been shown to be extensive. In this work, we aimed to assess whether postmortem \n",
+            "quantitative MRI (qMRI) can help detect those areas. We imaged six fixed whole \n",
+            "brains of deceased pwMS by 3T-MRI using magnetization transfer ratio (MTR, \n",
+            "570 μm isotropic), myelin water fraction (MWF, 1000 μm isotropic), quantitative \n",
+            "T1 (qT1, 670 μm isotropic), quantitative susceptibility mapping (QSM, 330 μm \n",
+            "isotropic) and radial di...\n",
+            "\n",
+            "Source 2 (PubMed ID: 40229636):\n",
+            "1. Brain Pathol. 2025 Apr 14:e70010. doi: 10.1111/bpa.70010. Online ahead of\n",
+            "print.\n",
+            "\n",
+            "Quantitative T1 is sensitive to cortical remyelination in multiple sclerosis: A \n",
+            "postmortem MRI study.\n",
+            "\n",
+            "Galbusera R(1)(2)(3), Weigel M(1)(2)(3)(4), Bahn E(5), Schaedelin S(1)(2)(3)(6), \n",
+            "Cagol A(1)(2)(3)(7), Lu PJ(1)(2)(3), Barakovic M(1)(2)(3), Melie-Garcia \n",
+            "L(1)(2)(3), Franz J(5), Dechent P(8), Nair G(9), Kappos L(2)(3), Brück W(5), \n",
+            "Stadelmann C(5), Granziera C(1)(2)(3)....\n",
+            "\n",
+            "Source 3 (PubMed ID: 40229470):\n",
+            "1. Neurol Sci. 2025 Apr 14. doi: 10.1007/s10072-025-08140-8. Online ahead of\n",
+            "print.\n",
+            "\n",
+            "Safety and effectiveness of diroximel fumarate in relapsing forms of multiple \n",
+            "sclerosis: a systematic review and meta-analysis.\n",
+            "\n",
+            "Sabet H(1), Zanaty MA(2), Arafa A(3), El-Moslemani M(3), Olama SM(4), Saleh \n",
+            "MGA(5), Abbas A(3), Obeidat AZ(6).\n",
+            "\n",
+            "Author information:\n",
+            "(1)Faculty of Medicine, South Valley University, Qena, Egypt. \n",
+            "haninsabet225@gmail.com.\n",
+            "(2)Faculty of Medicine, South Valley University, Qena, Egypt.\n",
+            "(3...\n",
+            "\n",
+            "Source 4 (PubMed ID: 40229195):\n",
+            "1. Exp Neurobiol. 2025 Apr 15. doi: 10.5607/en25009. Online ahead of print.\n",
+            "\n",
+            "Celiac Disease Increases the Risk of Multiple Sclerosis: Evidence from Mendelian \n",
+            "Randomization and the Role of CCL19.\n",
+            "\n",
+            "Lim S(1), Wu J(2), Kim YW(1), Lim SW(1), Shin J(3), Shin HJ(4), Kim SR(5), Kim \n",
+            "DW(1).\n",
+            "\n",
+            "Author information:\n",
+            "(1)Department of Oral Anatomy & Developmental Biology, Kyung Hee University \n",
+            "College of Dentistry, Seoul 02447, Korea.\n",
+            "(2)Department of Neurology, Southwest Hospital, Third Military Medical \n",
+            "Univ...\n"
+          ]
+        }
+      ]
+    },
+    {
+      "cell_type": "code",
+      "source": [],
+      "metadata": {
+        "id": "PEfdm1N36-f_"
+      },
+      "execution_count": null,
+      "outputs": []
+    }
+  ]
+}
